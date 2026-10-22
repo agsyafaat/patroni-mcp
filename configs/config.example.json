@@ -1,0 +1,14 @@
+{
+  "clusters": {
+    "production": {
+      "url": "https://10.140.8.33:8008",
+      "username": "mcp_readonly",
+      "password_env": "PATRONI_API_PASSWORD",
+      "ca_file": "/etc/patroni-mcp/ca.crt"
+    }
+  },
+  "timeout_seconds": 5,
+  "allow_writes": false,
+  "allow_failover": false,
+  "allow_config_writes": false
+}

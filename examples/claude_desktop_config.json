@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "patroni": {
+      "command": "C:\\Tools\\patroni-mcp.exe",
+      "args": ["--config", "C:\\Tools\\patroni-mcp-config.json"],
+      "env": {
+        "PATRONI_API_PASSWORD": "REPLACE_ME"
+      }
+    }
+  }
+}

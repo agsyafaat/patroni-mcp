@@ -1,0 +1,22 @@
+[Unit]
+Description=Patroni MCP stdio server (requires attached MCP client)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=patronimcp
+Group=patronimcp
+EnvironmentFile=/etc/patroni-mcp/secrets.env
+ExecStart=/usr/local/bin/patroni-mcp --config /etc/patroni-mcp/config.json
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+# WARNING: This unit is a template, NOT directly startable with systemctl.
+# A socket-activated, connected stdio transport is required. Prefer direct
+# execution from Claude Desktop or an SSH stdio bridge instead.
