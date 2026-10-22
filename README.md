@@ -11,6 +11,7 @@ The implementation supports PostgreSQL HA monitoring, replication diagnostics, c
 | `patroni_cluster_status` | Cluster topology, primary, replicas, lag | Read-only |
 | `patroni_node_status` | Node health, role, timeline | Read-only |
 | `patroni_get_config` | Dynamic Patroni configuration | Read-only |
+| `patroni_show_config` | Dynamic configuration as YAML, like `patronictl show-config` | Read-only |
 | `patroni_replication_status` | Replication and cluster status | Read-only |
 | `patroni_switchover` | Planned primary switchover | Disabled |
 | `patroni_failover` | Manual primary failover | Disabled |

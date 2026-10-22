@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -45,7 +47,7 @@ type Tool struct {
 	InputSchema any    `json:"inputSchema"`
 }
 
-var names = []string{"patroni_cluster_status", "patroni_node_status", "patroni_get_config", "patroni_replication_status", "patroni_switchover", "patroni_failover", "patroni_update_config"}
+var names = []string{"patroni_cluster_status", "patroni_node_status", "patroni_get_config", "patroni_replication_status", "patroni_switchover", "patroni_failover", "patroni_update_config", "patroni_show_config"}
 
 func schema(properties map[string]any, required ...string) any {
 	return map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}
@@ -61,6 +63,7 @@ func tools() []Tool {
 		{names[4], "Request planned switchover; requires allow_writes and explicit leader and candidate", schema(map[string]any{"cluster": c, "leader": prop("string", "Current leader"), "candidate": prop("string", "Target replica")}, "cluster", "leader", "candidate")},
 		{names[5], "Request emergency failover; requires allow_writes and allow_failover", schema(map[string]any{"cluster": c, "candidate": prop("string", "Target replica")}, "cluster", "candidate")},
 		{names[6], "Patch allowlisted Patroni dynamic configuration keys; requires allow_writes and allow_config_writes", schema(map[string]any{"cluster": c, "changes": map[string]any{"type": "object", "description": "Only loop_wait, retry_timeout, maximum_lag_on_failover, ttl", "additionalProperties": true}}, "cluster", "changes")},
+		{names[7], "Show Patroni dynamic configuration as YAML, like patronictl show-config", schema(map[string]any{"cluster": c}, "cluster")},
 	}
 	return result
 }
@@ -190,7 +193,7 @@ func call(cfg Config, name string, raw json.RawMessage) any {
 	case names[0], names[3]:
 	case names[1]:
 		path = "/patroni"
-	case names[2]:
+	case names[2], names[7]:
 		path = "/config"
 	case names[4]:
 		if !cfg.AllowWrites {
@@ -252,10 +255,99 @@ func call(cfg Config, name string, raw json.RawMessage) any {
 			b, _ = json.Marshal(map[string]any{"cluster": alias, "members": doc["members"], "scope": doc["scope"]})
 		}
 	}
+	if name == names[7] {
+		dec := json.NewDecoder(bytes.NewReader(b))
+		dec.UseNumber()
+		var doc any
+		if err := dec.Decode(&doc); err != nil {
+			return toolError(fmt.Errorf("invalid configuration JSON: %w", err))
+		}
+		return map[string]any{"content": []any{map[string]any{"type": "text", "text": toYAML(doc)}}}
+	}
 	if len(b) == 0 {
 		b = []byte(`{"status":"accepted"}`)
 	}
 	return toolSuccess(b)
+}
+
+// toYAML renders decoded JSON in the block style of patronictl show-config
+// (PyYAML safe_dump: sorted keys, list items aligned with their parent key).
+func toYAML(v any) string { return strings.Join(yamlLines(v), "\n") + "\n" }
+func yamlLines(v any) []string {
+	switch t := v.(type) {
+	case map[string]any:
+		if len(t) == 0 {
+			return []string{"{}"}
+		}
+		keys := make([]string, 0, len(t))
+		for k := range t {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		var out []string
+		for _, k := range keys {
+			child := yamlLines(t[k])
+			switch c := t[k].(type) {
+			case map[string]any:
+				if len(c) > 0 {
+					out = append(out, yamlString(k)+":")
+					for _, l := range child {
+						out = append(out, "  "+l)
+					}
+					continue
+				}
+			case []any:
+				if len(c) > 0 {
+					out = append(out, yamlString(k)+":")
+					out = append(out, child...)
+					continue
+				}
+			}
+			out = append(out, yamlString(k)+": "+child[0])
+		}
+		return out
+	case []any:
+		if len(t) == 0 {
+			return []string{"[]"}
+		}
+		var out []string
+		for _, item := range t {
+			child := yamlLines(item)
+			out = append(out, "- "+child[0])
+			for _, l := range child[1:] {
+				out = append(out, "  "+l)
+			}
+		}
+		return out
+	case string:
+		return []string{yamlString(t)}
+	case json.Number:
+		return []string{t.String()}
+	case bool:
+		return []string{strconv.FormatBool(t)}
+	case nil:
+		return []string{"null"}
+	}
+	return []string{fmt.Sprint(v)}
+}
+func yamlString(s string) string {
+	if strings.ContainsAny(s, "\n\r\t\\") || strings.IndexFunc(s, func(r rune) bool { return r < 0x20 }) >= 0 {
+		q, _ := json.Marshal(s)
+		return string(q)
+	}
+	plain := s != "" && !strings.ContainsAny(s[:1], "-?:,[]{}#&*!|>'\"%@` ") && !strings.HasSuffix(s, " ") && !strings.HasSuffix(s, ":") &&
+		!strings.Contains(s, ": ") && !strings.Contains(s, " #")
+	switch strings.ToLower(s) {
+	case "true", "false", "yes", "no", "on", "off", "y", "n", "null", "~":
+		plain = false
+	}
+	if _, err := strconv.ParseFloat(s, 64); err == nil {
+		plain = false
+	}
+	if plain {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 func main() {
 	log.SetOutput(os.Stderr)
