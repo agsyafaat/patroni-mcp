@@ -2,11 +2,27 @@
 
 A small, dependency-free MCP **stdio** server for Patroni REST API. Designed for local Claude Desktop / Cursor execution or over SSH with stdio forwarding. This is a **reference implementation**, not an audited production release.
 
+The implementation supports PostgreSQL HA monitoring, replication diagnostics, configuration inspection, and controlled administrative operations.
+
 ## Features
 
+| MCP tool | Function | Default access |
+|---|---|---|
+| `patroni_cluster_status` | Cluster topology, primary, replicas, lag | Read-only |
+| `patroni_node_status` | Node health, role, timeline | Read-only |
+| `patroni_get_config` | Dynamic Patroni configuration | Read-only |
+| `patroni_replication_status` | Replication and cluster status | Read-only |
+| `patroni_switchover` | Planned primary switchover | Disabled |
+| `patroni_failover` | Manual primary failover | Disabled |
+| `patroni_update_config` | Update dynamic configuration | Disabled |
+
+**Production safety:** Administrative operations are disabled by default. The MCP server uses an explicit cluster allowlist, HTTP timeouts, optional TLS authentication, and audit logging for write operations.
+
+The deployment includes a Go executable, configuration file (`configs/config.example.json`), systemd unit (`deploy/patroni-mcp.service`), and Claude Desktop configuration (`examples/claude_desktop_config.json`).
+
+Implementation details:
+
 - MCP JSON-RPC `initialize`, `ping`, `tools/list`, `tools/call` (protocol 2024-11-05).
-- Read-only: `patroni_cluster_status`, `patroni_node_status`, `patroni_get_config`, `patroni_replication_status`.
-- Optional writes: `patroni_switchover`, `patroni_failover`, `patroni_update_config`.
 - Cluster allowlist; HTTPS with optional custom CA and client certificate; optional basic authentication via environment variable; timeouts; redirects disabled; bounded response size; stderr audit logs.
 
 ## Build
